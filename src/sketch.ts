@@ -1,5 +1,4 @@
-import { multiply, exp, map } from 'mathjs';
-import model from './model.json';
+import { Tensor } from 'onnxruntime-web';
 
 const WIDTH = 280;
 const HEIGHT = 280;
@@ -61,43 +60,45 @@ const clearCanvas = () => {
   ctx.fillRect(0, 0, WIDTH, HEIGHT);
 };
 
-const predict = (input: number[]) => {
-  let output = input;
-  for (const layer of model) {
-    const z = multiply(layer, [1, ...output]);
-    output = map(z, (o) => exp(o) / (1 + exp(o)));
-  }
-  let max = -Infinity;
-  let maxi = -1;
-  for (let i = 0; i < output.length; i++) {
-    if (output[i] > max) { max = output[i]; maxi = i; }
-  }
-  return maxi;
-};
-
-const convertDrawing = () => {
+const toTensor = (): Tensor => {
   const cellSize = CELL * dpr;
   const { data: pixels } = ctx.getImageData(0, 0, canvas.width, canvas.height);
-  const grid: number[] = [];
+  const values = new Float32Array(GRID_SIZE * GRID_SIZE);
 
   for (let row = 0; row < GRID_SIZE; row++) {
     for (let col = 0; col < GRID_SIZE; col++) {
-      let hit = false;
-      outer: for (let y = row * cellSize; y < (row + 1) * cellSize; y++) {
-        for (let x = col * cellSize; x < (col + 1) * cellSize; x++) {
-          if (pixels[4 * (Math.floor(y) * canvas.width + Math.floor(x))] < 150) {
-            hit = true;
-            break outer;
-          }
+      let sum = 0;
+      const yStart = Math.floor(row * cellSize);
+      const yEnd = Math.floor((row + 1) * cellSize);
+      const xStart = Math.floor(col * cellSize);
+      const xEnd = Math.floor((col + 1) * cellSize);
+      for (let y = yStart; y < yEnd; y++) {
+        for (let x = xStart; x < xEnd; x++) {
+          sum += pixels[4 * (y * canvas.width + x)]; // R channel (grayscale)
         }
       }
-      grid.push(hit ? 1 : 0);
+      const count = (yEnd - yStart) * (xEnd - xStart);
+      // Invert: white background (255) → 0.0, black drawing (0) → 1.0
+      values[row * GRID_SIZE + col] = (255 - sum / count) / 255;
     }
   }
 
-  const result = predict(grid);
-  const el = document.getElementById('matrix');
-  if (el) el.textContent = result.toString(10);
+  // Z-score normalization: mean=0, std=1
+  const mean = values.reduce((a, b) => a + b, 0) / values.length;
+  const variance = values.reduce((a, b) => a + (b - mean) ** 2, 0) / values.length;
+  const std = Math.sqrt(variance);
+  if (std > 0) {
+    for (let i = 0; i < values.length; i++) {
+      values[i] = (values[i] - mean) / std;
+    }
+  }
+
+  return new Tensor('float32', values, [1, 1, GRID_SIZE, GRID_SIZE]);
+};
+
+const convertDrawing = () => {
+  const tensor = toTensor();
+  console.log('Input tensor:', tensor);
 };
 
 document.getElementById('clearBtn')?.addEventListener('click', clearCanvas);
