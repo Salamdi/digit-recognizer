@@ -1,4 +1,6 @@
-import { Tensor } from 'onnxruntime-web';
+import * as ort from 'onnxruntime-web';
+
+ort.env.wasm.numThreads = 1;
 
 const WIDTH = 280;
 const HEIGHT = 280;
@@ -60,7 +62,7 @@ const clearCanvas = () => {
   ctx.fillRect(0, 0, WIDTH, HEIGHT);
 };
 
-const toTensor = (): Tensor => {
+const toTensor = (): ort.Tensor => {
   const cellSize = CELL * dpr;
   const { data: pixels } = ctx.getImageData(0, 0, canvas.width, canvas.height);
   const values = new Float32Array(GRID_SIZE * GRID_SIZE);
@@ -93,12 +95,34 @@ const toTensor = (): Tensor => {
     }
   }
 
-  return new Tensor('float32', values, [1, 1, GRID_SIZE, GRID_SIZE]);
+  return new ort.Tensor('float32', values, [1, 1, GRID_SIZE, GRID_SIZE]);
 };
 
-const convertDrawing = () => {
-  const tensor = toTensor();
-  console.log('Input tensor:', tensor);
+const sessionPromise = ort.InferenceSession.create('/model.onnx', {
+  executionProviders: ['wasm'],
+});
+
+const convertDrawing = async () => {
+  const resultEl = document.getElementById('matrix');
+
+  try {
+    const session = await sessionPromise;
+    const tensor = toTensor();
+    const feeds = { [session.inputNames[0]]: tensor };
+    const results = await session.run(feeds);
+    const output = results[session.outputNames[0]].data as Float32Array;
+
+    let maxVal = -Infinity;
+    let predicted = -1;
+    for (let i = 0; i < output.length; i++) {
+      if (output[i] > maxVal) { maxVal = output[i]; predicted = i; }
+    }
+
+    if (resultEl) resultEl.textContent = predicted.toString();
+  } catch (err) {
+    console.error('Inference failed:', err);
+    if (resultEl) resultEl.textContent = 'Error';
+  }
 };
 
 document.getElementById('clearBtn')?.addEventListener('click', clearCanvas);
