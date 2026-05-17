@@ -102,9 +102,22 @@ const sessionPromise = ort.InferenceSession.create('/model.onnx', {
   executionProviders: ['wasm'],
 });
 
-const convertDrawing = async () => {
-  const resultEl = document.getElementById('matrix');
+const renderChart = (probs: number[], predicted: number): void => {
+  const chartEl = document.getElementById('chart');
+  if (!chartEl) return;
+  const BAR_MAX_HEIGHT = 120;
+  chartEl.innerHTML = probs.map((p, i) => {
+    const height = Math.round(p * BAR_MAX_HEIGHT);
+    const winner = i === predicted;
+    return `<div class="bar-item${winner ? ' bar-item--winner' : ''}">
+      <span class="bar-score">${(p * 100).toFixed(1)}%</span>
+      <div class="bar" style="height:${height}px"></div>
+      <span class="bar-label">${i}</span>
+    </div>`;
+  }).join('');
+};
 
+const convertDrawing = async () => {
   try {
     const session = await sessionPromise;
     const tensor = toTensor();
@@ -118,10 +131,9 @@ const convertDrawing = async () => {
       if (output[i] > maxVal) { maxVal = output[i]; predicted = i; }
     }
 
-    if (resultEl) resultEl.textContent = predicted.toString();
+    renderChart(Array.from(output), predicted);
   } catch (err) {
     console.error('Inference failed:', err);
-    if (resultEl) resultEl.textContent = 'Error';
   }
 };
 
