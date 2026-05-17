@@ -1,108 +1,104 @@
 import { multiply, exp, map } from 'mathjs';
-import p5 from 'p5';
 import model from './model.json';
 
-const sketch = (p: p5) => {
-  let canvas: p5.Renderer;
+const WIDTH = 280;
+const HEIGHT = 280;
+const GRID_SIZE = 28;
+const CELL = WIDTH / GRID_SIZE; // 10px per cell
 
-  p.setup = () => {
-    // Create a 280x280 canvas
-    canvas = p.createCanvas(280, 280);
-    // Attach canvas to the container in index.html
-    const container = document.getElementById('canvas-container');
-    if (container) {
-      container.appendChild(canvas.elt);
-    }
-    // Set background and drawing settings
-    p.background(255);
-    p.stroke(0);
-    p.strokeWeight(16);
+const container = document.getElementById('canvas-container')!;
+const canvas = document.createElement('canvas');
+const ctx = canvas.getContext('2d')!;
 
-    // Bind button events (using standard DOM)
-    const clearBtn = document.getElementById('clearBtn');
-    if (clearBtn) {
-      clearBtn.addEventListener('click', clearCanvas);
-    }
-    const convertBtn = document.getElementById('convertBtn');
-    if (convertBtn) {
-      convertBtn.addEventListener('click', convertDrawing);
-    }
-  };
+const dpr = window.devicePixelRatio || 1;
+canvas.width = WIDTH * dpr;
+canvas.height = HEIGHT * dpr;
+canvas.style.width = `${WIDTH}px`;
+canvas.style.height = `${HEIGHT}px`;
+ctx.scale(dpr, dpr);
 
-  p.draw = () => {
-    // Draw lines while the mouse is pressed and within canvas bounds
-    if (
-      p.mouseIsPressed &&
-      p.mouseX >= 0 &&
-      p.mouseX < p.width &&
-      p.mouseY >= 0 &&
-      p.mouseY < p.height
-    ) {
-      p.line(p.pmouseX, p.pmouseY, p.mouseX, p.mouseY);
-    }
-  };
+container.appendChild(canvas);
 
-  const clearCanvas = (): void => {
-    p.background(255);
-  };
+ctx.fillStyle = 'white';
+ctx.fillRect(0, 0, WIDTH, HEIGHT);
+ctx.strokeStyle = 'black';
+ctx.lineWidth = 16;
+ctx.lineCap = 'round';
+ctx.lineJoin = 'round';
 
-  const predict = (input: number[]) => {
-    let output = input;
+let drawing = false;
+let prevX = 0;
+let prevY = 0;
 
-    for (let layer of model) {
-      const z = multiply(layer, [1, ...output]);
-      output = map(z, (o) => exp(o) / (1 + exp(o)));
-    }
+function getPos(e: MouseEvent) {
+  const rect = canvas.getBoundingClientRect();
+  return { x: e.clientX - rect.left, y: e.clientY - rect.top };
+}
 
-    let max = -Infinity;
-    let maxi = -1;
+canvas.addEventListener('mousedown', (e) => {
+  drawing = true;
+  const pos = getPos(e);
+  prevX = pos.x;
+  prevY = pos.y;
+});
 
-    for (let i = 0; i < output.length; i++) {
-      if (output[i] > max) {
-        max = output[i];
-        maxi = i;
-      }
-    }
+canvas.addEventListener('mousemove', (e) => {
+  if (!drawing) return;
+  const pos = getPos(e);
+  ctx.beginPath();
+  ctx.moveTo(prevX, prevY);
+  ctx.lineTo(pos.x, pos.y);
+  ctx.stroke();
+  prevX = pos.x;
+  prevY = pos.y;
+});
 
-    return maxi;
-  };
+canvas.addEventListener('mouseup', () => { drawing = false; });
+canvas.addEventListener('mouseleave', () => { drawing = false; });
 
-  const convertDrawing = (): void => {
-    // Update the pixel array from the canvas
-    p.loadPixels();
-    const cellSize = 10 * p.pixelDensity(); // 280 / 28 = 10
-    const grid: number[][] = [];
-
-    // Iterate over each cell in the 28x28 grid
-    for (let row = 0; row < 28; row++) {
-      const gridRow: number[] = [];
-      for (let col = 0; col < 28; col++) {
-        let cellHasDrawing = false;
-        // Check each pixel in the 10x10 block
-        for (let y = row * cellSize; y < (row + 1) * cellSize; y++) {
-          for (let x = col * cellSize; x < (col + 1) * cellSize; x++) {
-            const index = 4 * (y * p.width * p.pixelDensity() + x);
-            // The canvas background is white (255); any pixel drawn (black) will be lower.
-            if (p.pixels[index] < 150) {
-              cellHasDrawing = true;
-              break;
-            }
-          }
-          if (cellHasDrawing) break;
-        }
-        gridRow.push(cellHasDrawing ? 1 : 0);
-      }
-      grid.push(gridRow);
-    }
-
-    // Log and display the grid
-    const result = predict(grid.flat());
-    const matrixPre = document.getElementById('matrix');
-    if (matrixPre) {
-      matrixPre.textContent = result.toString(10);
-    }
-  };
+const clearCanvas = () => {
+  ctx.fillStyle = 'white';
+  ctx.fillRect(0, 0, WIDTH, HEIGHT);
 };
 
-// Create a new p5 instance with our sketch
-new p5(sketch);
+const predict = (input: number[]) => {
+  let output = input;
+  for (const layer of model) {
+    const z = multiply(layer, [1, ...output]);
+    output = map(z, (o) => exp(o) / (1 + exp(o)));
+  }
+  let max = -Infinity;
+  let maxi = -1;
+  for (let i = 0; i < output.length; i++) {
+    if (output[i] > max) { max = output[i]; maxi = i; }
+  }
+  return maxi;
+};
+
+const convertDrawing = () => {
+  const cellSize = CELL * dpr;
+  const { data: pixels } = ctx.getImageData(0, 0, canvas.width, canvas.height);
+  const grid: number[] = [];
+
+  for (let row = 0; row < GRID_SIZE; row++) {
+    for (let col = 0; col < GRID_SIZE; col++) {
+      let hit = false;
+      outer: for (let y = row * cellSize; y < (row + 1) * cellSize; y++) {
+        for (let x = col * cellSize; x < (col + 1) * cellSize; x++) {
+          if (pixels[4 * (Math.floor(y) * canvas.width + Math.floor(x))] < 150) {
+            hit = true;
+            break outer;
+          }
+        }
+      }
+      grid.push(hit ? 1 : 0);
+    }
+  }
+
+  const result = predict(grid);
+  const el = document.getElementById('matrix');
+  if (el) el.textContent = result.toString(10);
+};
+
+document.getElementById('clearBtn')?.addEventListener('click', clearCanvas);
+document.getElementById('convertBtn')?.addEventListener('click', convertDrawing);
