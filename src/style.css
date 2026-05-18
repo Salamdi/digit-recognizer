@@ -17,6 +17,7 @@ body {
 }
 canvas {
   border: 1px solid #000;
+  touch-action: none;
 }
 #controls {
   margin-bottom: 20px;

@@ -23,7 +23,7 @@ container.appendChild(canvas);
 ctx.fillStyle = 'white';
 ctx.fillRect(0, 0, WIDTH, HEIGHT);
 ctx.strokeStyle = 'black';
-ctx.lineWidth = 16;
+ctx.lineWidth = 8;
 ctx.lineCap = 'round';
 ctx.lineJoin = 'round';
 
@@ -41,32 +41,42 @@ const stopInferenceLoop = () => {
   if (inferenceTimer) { clearInterval(inferenceTimer); inferenceTimer = null; }
 };
 
-function getPos(e: MouseEvent) {
+function getPointerPos(clientX: number, clientY: number) {
   const rect = canvas.getBoundingClientRect();
-  return { x: e.clientX - rect.left, y: e.clientY - rect.top };
+  return { x: clientX - rect.left, y: clientY - rect.top };
 }
 
-canvas.addEventListener('mousedown', (e) => {
+const onStart = (x: number, y: number) => {
   drawing = true;
-  const pos = getPos(e);
-  prevX = pos.x;
-  prevY = pos.y;
+  prevX = x; prevY = y;
   startInferenceLoop();
-});
+};
 
-canvas.addEventListener('mousemove', (e) => {
+const onMove = (x: number, y: number) => {
   if (!drawing) return;
-  const pos = getPos(e);
   ctx.beginPath();
   ctx.moveTo(prevX, prevY);
-  ctx.lineTo(pos.x, pos.y);
+  ctx.lineTo(x, y);
   ctx.stroke();
-  prevX = pos.x;
-  prevY = pos.y;
-});
+  prevX = x; prevY = y;
+};
 
-canvas.addEventListener('mouseup', () => { if (drawing) { drawing = false; stopInferenceLoop(); convertDrawing(); } });
-canvas.addEventListener('mouseleave', () => { if (drawing) { drawing = false; stopInferenceLoop(); convertDrawing(); } });
+const onEnd = () => {
+  if (!drawing) return;
+  drawing = false;
+  stopInferenceLoop();
+  convertDrawing();
+};
+
+canvas.addEventListener('mousedown', (e) => { const p = getPointerPos(e.clientX, e.clientY); onStart(p.x, p.y); });
+canvas.addEventListener('mousemove', (e) => { const p = getPointerPos(e.clientX, e.clientY); onMove(p.x, p.y); });
+canvas.addEventListener('mouseup', onEnd);
+canvas.addEventListener('mouseleave', onEnd);
+
+canvas.addEventListener('touchstart', (e) => { e.preventDefault(); const t = e.touches[0]; const p = getPointerPos(t.clientX, t.clientY); onStart(p.x, p.y); }, { passive: false });
+canvas.addEventListener('touchmove',  (e) => { e.preventDefault(); const t = e.touches[0]; const p = getPointerPos(t.clientX, t.clientY); onMove(p.x, p.y); },  { passive: false });
+canvas.addEventListener('touchend',    (e) => { e.preventDefault(); onEnd(); }, { passive: false });
+canvas.addEventListener('touchcancel', (e) => { e.preventDefault(); onEnd(); }, { passive: false });
 
 const clearCanvas = () => {
   ctx.fillStyle = 'white';
