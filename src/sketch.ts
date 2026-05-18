@@ -81,6 +81,8 @@ canvas.addEventListener('touchcancel', (e) => { e.preventDefault(); onEnd(); }, 
 const clearCanvas = () => {
   ctx.fillStyle = 'white';
   ctx.fillRect(0, 0, WIDTH, HEIGHT);
+  const chartEl = document.getElementById('chart');
+  if (chartEl) chartEl.innerHTML = '';
 };
 
 const toTensor = (): ort.Tensor => {
