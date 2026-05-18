@@ -30,6 +30,16 @@ ctx.lineJoin = 'round';
 let drawing = false;
 let prevX = 0;
 let prevY = 0;
+let inferenceTimer: ReturnType<typeof setInterval> | null = null;
+
+const startInferenceLoop = () => {
+  if (inferenceTimer) return;
+  inferenceTimer = setInterval(convertDrawing, 100);
+};
+
+const stopInferenceLoop = () => {
+  if (inferenceTimer) { clearInterval(inferenceTimer); inferenceTimer = null; }
+};
 
 function getPos(e: MouseEvent) {
   const rect = canvas.getBoundingClientRect();
@@ -41,6 +51,7 @@ canvas.addEventListener('mousedown', (e) => {
   const pos = getPos(e);
   prevX = pos.x;
   prevY = pos.y;
+  startInferenceLoop();
 });
 
 canvas.addEventListener('mousemove', (e) => {
@@ -54,8 +65,8 @@ canvas.addEventListener('mousemove', (e) => {
   prevY = pos.y;
 });
 
-canvas.addEventListener('mouseup', () => { drawing = false; });
-canvas.addEventListener('mouseleave', () => { drawing = false; });
+canvas.addEventListener('mouseup', () => { if (drawing) { drawing = false; stopInferenceLoop(); convertDrawing(); } });
+canvas.addEventListener('mouseleave', () => { if (drawing) { drawing = false; stopInferenceLoop(); convertDrawing(); } });
 
 const clearCanvas = () => {
   ctx.fillStyle = 'white';
@@ -138,4 +149,3 @@ const convertDrawing = async () => {
 };
 
 document.getElementById('clearBtn')?.addEventListener('click', clearCanvas);
-document.getElementById('convertBtn')?.addEventListener('click', convertDrawing);
